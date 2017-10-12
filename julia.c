@@ -42,7 +42,7 @@ int main(int argc, char**argv)
         fprintf(stderr, "usage: julia [image_size]\n");
         return -1;
     }
-
+    double start_clock=omp_get_wtime();
     uint8_t* julia_counts = (uint8_t*) calloc(n*n, sizeof(uint8_t));
     printf("Generating %d x %d Julia Set Data\n", n, n);
 
@@ -50,25 +50,42 @@ int main(int argc, char**argv)
     /* ~~~~~~~~~~~~ PARALLELIZE AND OFFLOAD ME ~~~~~~~~~~~~*/
     /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
     /* Main Computational Loop */
+	
+    #pragma offload target(mic)\
+	inout(julia_counts: length(n*n) alloc_if(1) free_if(1)),\
+	in(n)
+	#pragma omp parallel for collapse(2)
     for (int i = 0; i < n; ++i){ 
         for (int j = 0; j < n; ++j){
             double x = -1.0 + (double)i*(2.0/(n-1)) ;
             double y = -1.0 + (double)j*(2.0/(n-1)) ;
             julia_counts[i + j*n] = julia_loop(x, y);
-        }
+		}
+
     }
+
     /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
     /* ~~~~~~~~~~~~ PARALLELIZE AND OFFLOAD ME ~~~~~~~~~~~~*/
     /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
+   
     /* Dump julia_counts into a .txt file named julia.txt*/
-    FILE *fid = fopen("julia.txt", "w");
+	FILE *fid;
+	fid= fopen("julia.txt", "w");
+	
     fprintf(fid, "%d\n", n);
+	
+	//#pragma omp parallel for ordered
     for (int i = 0; i < n; ++i)
         for (int j = 0; j < n; ++j)
             fprintf(fid, "%d\n", julia_counts[i + j*n]);
-    fclose(fid);
+	fclose(fid);
+	
+	double stop_clock=omp_get_wtime();
 
+	double diff= stop_clock-start_clock;
+	
+	printf("Time: %f\n", diff);
+	
     return 1;
 
 }
